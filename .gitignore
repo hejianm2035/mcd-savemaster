@@ -1,0 +1,13 @@
+# 敏感信息：绝不提交真实 Token / 密钥
+*.token
+*.env
+.env
+token.txt
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 本地临时
+*.log
+__pycache__/

@@ -51,16 +51,28 @@
       ↓
 [1] auto-bind-coupons → query-my-coupons / query-store-coupons   // 把券领满、摸清家底
       ↓
-[2] query-nearby-stores / delivery-*                              // 锁定门店
+[2] query-nearby-stores / delivery-*                              // 锁定门店(拿 storeCode)
       ↓
-[3] query-meals → query-meal-detail                               // 拉真实菜单
+[3] query-meals → query-meal-detail                               // 拉真实菜单 + 取标准售卖码
       ↓
-[4] calculate-price × N 组合(含券)                                 // 多方案含券比价
+[4] calculate-price × N 组合(含券, couponId+couponCode 成对)        // 多方案含券比价
       ↓
 [5] 结构化表格对比 + 推荐                                          // 告诉用户省了多少
       ↓
-[6] create-order (用户确认后) → 支付链接                           // 一键成交
+[6] create-order (用户确认后) → 支付链接                           // 一键成交(真实付款,需确认)
 ```
+
+## 4. 真实联调结论（⚠️ 关键，漏掉会跑出 0 元/报错）
+
+> 以下为 2026-10-09 用真实 Token 联调 `mcd-mcp` v1.0.0 的实证结论。
+
+1. **接入根路径是 `https://mcp.mcd.cn`（不要加 `/mcp` 后缀）**，否则 404。协议 Streamable HTTP，初始化后无需手动维护 `Mcp-Session-Id`（无状态也可）。
+2. **`query-meals` / `calculate-price` 必填三件套**：`beType`（1=到店自提 / 2=麦乐送到家 / 5=得来速 / 6=团餐）+ `orderType`（1=到店 / 2=外送）+ `storeCode`。缺任一会报 `400 缺少参数`。
+3. **菜单 code ≠ 可计价售卖码（最重要）**：`query-meals` 返回的是「人气热卖 / 精选单人餐」等**分组/展示码**，直接丢进 `calculate-price` 会**静默返回 `price:0 / productList:[]`**（不报错，极易误以为成功）。必须先 `query-meal-detail` 拿到标准售卖码（如 `1440`=麦辣鸡腿汉堡）再算价。
+4. **优惠券必须 `couponId` + `couponCode` 成对传**：`calculate-price` 的 items 里只传 `couponId` 会报 `600010 使用优惠券需要couponId和couponCode`。`auto-bind-coupons` 返回两者齐全，直接透传。
+5. **`query-nearby-stores` 到店场景不返回 `beCode`**，可省略；仅得来速/外送需 `beCode`（从门店或 `delivery-query-stores` 返回中取）。
+6. **`auto-bind-coupons` 是真实领券**：一次调用可领到当前全部可领麦麦省券（实测 9 张全成功），属免费操作；`create-order` 是**真实下单付款**，Skill 设计为「用户确认后才调用」，演示不触发真实扣款。
+7. 限流 600 次/分钟，正常比价调用远不会触顶；连续高频才需降速。
 
 ## 4. 业务价值
 
